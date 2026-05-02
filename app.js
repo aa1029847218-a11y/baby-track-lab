@@ -4,7 +4,7 @@ const sourceCanvas = document.getElementById("source");
 const sourceCtx = sourceCanvas.getContext("2d", { willReadFrequently: true });
 const video = document.getElementById("media");
 const image = document.getElementById("imageSource");
-const statusEl = document.getElementById("status");
+const statusEl = document.getElementById("status") || { textContent: "" };
 const blobCountEl = document.getElementById("blobCount");
 
 const state = {
@@ -118,7 +118,6 @@ document.getElementById("cameraBtn").addEventListener("click", async () => {
 });
 
 document.getElementById("flipCameraBtn").addEventListener("click", flipCamera);
-document.getElementById("stageFlipBtn").addEventListener("click", flipCamera);
 
 document.getElementById("playBtn").addEventListener("click", (event) => {
   state.running = !state.running;
@@ -241,7 +240,7 @@ function stopCameraTracks() {
 
 function updateCameraButtons() {
   const label = state.facingMode === "user" ? "切后置" : "切前置";
-  for (const id of ["flipCameraBtn", "stageFlipBtn"]) {
+  for (const id of ["flipCameraBtn"]) {
     const button = document.getElementById(id);
     button.disabled = !state.cameraActive;
     button.textContent = label;
@@ -254,7 +253,7 @@ function render(time = 0) {
   applyFilter(time);
   const blobs = detectBlobs();
   drawTracking(blobs, time);
-  blobCountEl.textContent = `${blobs.length} blobs`;
+  if (blobCountEl) blobCountEl.textContent = `${blobs.length} blobs`;
   requestAnimationFrame(render);
 }
 
