@@ -254,14 +254,18 @@ button:disabled {
     position: sticky;
     top: 0;
     z-index: 5;
-    min-height: 54svh;
+    min-height: 0;
+    height: min(58svh, 100vw);
     border-top: 0;
     border-radius: 0 0 7px 7px;
   }
 
   #output {
     width: 100%;
-    max-height: 52svh;
+    height: 100%;
+    max-height: none;
+    aspect-ratio: auto;
+    object-fit: cover;
   }
 
   .brand {
@@ -310,10 +314,12 @@ button:disabled {
   }
 
   .stage-wrap {
-    min-height: 50svh;
+    height: min(54svh, 100vw);
+    min-height: 0;
   }
 
   #output {
-    max-height: 48svh;
+    height: 100%;
+    max-height: none;
   }
 }
