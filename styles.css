@@ -1,0 +1,257 @@
+:root {
+  color-scheme: dark;
+  --bg: #070707;
+  --panel: #121212;
+  --line: #282828;
+  --text: #f6f6f6;
+  --muted: #a4a4a4;
+  --accent: #71f6c7;
+  --accent-2: #ffcc66;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--text);
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+button, input {
+  font: inherit;
+}
+
+.app {
+  display: grid;
+  grid-template-columns: 360px minmax(0, 1fr);
+  gap: 8px;
+  min-height: 100vh;
+  padding: 8px;
+}
+
+.panel {
+  overflow: auto;
+  height: calc(100vh - 16px);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  padding: 14px;
+}
+
+.brand {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.eyebrow {
+  margin: 0 0 4px;
+  color: var(--accent);
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+h1, h2 {
+  margin: 0;
+  letter-spacing: 0;
+}
+
+h1 {
+  font-size: 24px;
+  line-height: 1.1;
+}
+
+h2 {
+  margin-bottom: 10px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.control-block {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  margin-top: 10px;
+  padding: 12px;
+}
+
+.control-block label {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  align-items: center;
+  margin: 9px 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.control-block input[type="range"] {
+  grid-column: 1 / -1;
+  width: 100%;
+  accent-color: var(--accent);
+}
+
+.control-block input[type="color"] {
+  width: 42px;
+  height: 28px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: transparent;
+}
+
+button, .file-btn {
+  border: 1px solid #3a3a3a;
+  border-radius: 7px;
+  background: #1d1d1d;
+  color: var(--text);
+  padding: 9px 10px;
+  cursor: pointer;
+  text-align: center;
+}
+
+button:hover, .file-btn:hover {
+  border-color: #5b5b5b;
+  background: #242424;
+}
+
+.icon-btn {
+  width: 38px;
+  height: 38px;
+  padding: 0;
+}
+
+.file-btn {
+  position: relative;
+  overflow: hidden;
+}
+
+.file-btn input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.button-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.wide {
+  width: 100%;
+}
+
+.segmented {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+
+.segmented button {
+  min-height: 34px;
+  padding: 7px 5px;
+  font-size: 12px;
+}
+
+.segmented button.active {
+  border-color: var(--accent);
+  background: #112820;
+  color: #d8fff2;
+}
+
+.filters {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.switch-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px 12px;
+  margin-top: 8px;
+}
+
+.switch-grid label {
+  display: flex;
+  gap: 7px;
+  margin: 4px 0;
+}
+
+.switch-grid input {
+  accent-color: var(--accent);
+}
+
+.stage-wrap {
+  position: relative;
+  display: flex;
+  min-height: calc(100vh - 16px);
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background:
+    linear-gradient(45deg, #0b0b0b 25%, transparent 25%),
+    linear-gradient(-45deg, #0b0b0b 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #0b0b0b 75%),
+    linear-gradient(-45deg, transparent 75%, #0b0b0b 75%);
+  background-color: #111;
+  background-position: 0 0, 0 12px, 12px -12px, -12px 0;
+  background-size: 24px 24px;
+}
+
+#output {
+  width: min(100%, calc((100vh - 46px) * 16 / 9));
+  max-height: calc(100vh - 46px);
+  aspect-ratio: 16 / 9;
+  border-radius: 6px;
+  background: #000;
+  box-shadow: 0 0 0 1px #2b2b2b, 0 28px 90px rgba(0, 0, 0, 0.55);
+}
+
+#media, #imageSource, #source {
+  display: none;
+}
+
+.stage-toolbar {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  right: 14px;
+  z-index: 2;
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  pointer-events: none;
+}
+
+.stage-toolbar span {
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 7px;
+  background: rgba(0, 0, 0, 0.62);
+  color: #e8e8e8;
+  padding: 6px 9px;
+  font-size: 12px;
+  backdrop-filter: blur(8px);
+}
+
+@media (max-width: 920px) {
+  .app {
+    grid-template-columns: 1fr;
+  }
+
+  .panel {
+    height: auto;
+    max-height: none;
+  }
+
+  .stage-wrap {
+    min-height: 62vh;
+  }
+}

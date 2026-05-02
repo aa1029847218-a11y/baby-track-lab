@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Baby Track Lab</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <main class="app">
+      <aside class="panel">
+        <header class="brand">
+          <div>
+            <p class="eyebrow">Blob tracking tool</p>
+            <h1>Baby Track Lab</h1>
+          </div>
+          <button id="resetBtn" class="icon-btn" title="重置参数" aria-label="重置参数">↺</button>
+        </header>
+
+        <section class="control-block">
+          <h2>输入</h2>
+          <div class="button-row">
+            <label class="file-btn">
+              导入媒体
+              <input id="fileInput" type="file" accept="image/*,video/*">
+            </label>
+            <button id="cameraBtn" type="button">摄像头</button>
+          </div>
+          <div class="button-row">
+            <button id="playBtn" type="button">暂停</button>
+            <button id="snapshotBtn" type="button">导出 PNG</button>
+          </div>
+          <button id="recordBtn" type="button" class="wide">录制 WebM</button>
+        </section>
+
+        <section class="control-block">
+          <h2>检测</h2>
+          <label>阈值 <output id="thresholdOut">128</output><input id="threshold" type="range" min="0" max="255" value="128"></label>
+          <label>采样精度 <output id="sampleOut">4</output><input id="sample" type="range" min="2" max="10" value="4"></label>
+          <label>最小面积 <output id="minAreaOut">64</output><input id="minArea" type="range" min="8" max="900" value="64"></label>
+          <label>最多目标 <output id="maxBlobsOut">22</output><input id="maxBlobs" type="range" min="1" max="80" value="22"></label>
+          <div class="switch-grid">
+            <label><input id="invertMask" type="checkbox"> 反选暗部</label>
+            <label><input id="singleMode" type="checkbox"> 单目标</label>
+          </div>
+        </section>
+
+        <section class="control-block">
+          <h2>视觉</h2>
+          <label>主颜色 <input id="mainColor" type="color" value="#ffffff"></label>
+          <label>线宽 <output id="strokeOut">1.5</output><input id="stroke" type="range" min="0.5" max="6" step="0.5" value="1.5"></label>
+          <label>连线率 <output id="linkOut">0.45</output><input id="linkRate" type="range" min="0" max="1" step="0.05" value="0.45"></label>
+          <label>文字大小 <output id="fontOut">12</output><input id="fontSize" type="range" min="8" max="28" value="12"></label>
+          <div class="segmented" role="group" aria-label="区域样式">
+            <button data-style="frame" class="active" type="button">Frame</button>
+            <button data-style="cross" type="button">Cross</button>
+            <button data-style="scope" type="button">Scope</button>
+            <button data-style="grid" type="button">Grid</button>
+            <button data-style="label" type="button">Label</button>
+            <button data-style="glow" type="button">Glow</button>
+          </div>
+          <div class="switch-grid">
+            <label><input id="showText" type="checkbox" checked> 标签</label>
+            <label><input id="crazyColor" type="checkbox"> 随机色</label>
+            <label><input id="blink" type="checkbox"> 闪烁</label>
+            <label><input id="dashed" type="checkbox"> 虚线</label>
+            <label><input id="hub" type="checkbox"> 中心枢纽</label>
+            <label><input id="showVideo" type="checkbox" checked> 底片</label>
+          </div>
+        </section>
+
+        <section class="control-block">
+          <h2>滤镜</h2>
+          <div class="segmented filters" role="group" aria-label="滤镜">
+            <button data-filter="none" class="active" type="button">None</button>
+            <button data-filter="invert" type="button">Invert</button>
+            <button data-filter="thermal" type="button">Thermal</button>
+            <button data-filter="pixel" type="button">Pixel</button>
+            <button data-filter="edge" type="button">Edge</button>
+            <button data-filter="crt" type="button">CRT</button>
+          </div>
+        </section>
+      </aside>
+
+      <section class="stage-wrap">
+        <div class="stage-toolbar">
+          <span id="status">演示源运行中</span>
+          <span id="blobCount">0 blobs</span>
+        </div>
+        <canvas id="output" width="1280" height="720"></canvas>
+        <video id="media" playsinline muted loop></video>
+        <img id="imageSource" alt="">
+        <canvas id="source" width="320" height="180"></canvas>
+      </section>
+    </main>
+    <script src="app.js"></script>
+  </body>
+</html>
