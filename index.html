@@ -32,12 +32,16 @@
             <button id="snapshotBtn" type="button">导出 PNG</button>
           </div>
           <button id="recordBtn" type="button" class="wide">录制 WebM</button>
+          <div class="segmented quality-toggle" role="group" aria-label="画质模式">
+            <button data-quality="quality" class="active" type="button">高清</button>
+            <button data-quality="performance" type="button">流畅</button>
+          </div>
         </section>
 
         <section class="control-block">
           <h2>检测</h2>
           <label>阈值 <output id="thresholdOut">128</output><input id="threshold" type="range" min="0" max="255" value="128"></label>
-          <label>采样精度 <output id="sampleOut">4</output><input id="sample" type="range" min="2" max="10" value="4"></label>
+          <label>采样精度 <output id="sampleOut">3</output><input id="sample" type="range" min="2" max="10" value="3"></label>
           <label>最小面积 <output id="minAreaOut">64</output><input id="minArea" type="range" min="8" max="900" value="64"></label>
           <label>最多目标 <output id="maxBlobsOut">22</output><input id="maxBlobs" type="range" min="1" max="80" value="22"></label>
           <div class="switch-grid">
@@ -89,7 +93,7 @@
           <span id="blobCount">0 blobs</span>
         </div>
         <button id="stageFlipBtn" class="stage-action" type="button" disabled aria-label="翻转前后置摄像头">翻转</button>
-        <canvas id="output" width="1280" height="720"></canvas>
+        <canvas id="output" width="1920" height="1080"></canvas>
         <video id="media" playsinline muted loop></video>
         <img id="imageSource" alt="">
         <canvas id="source" width="320" height="180"></canvas>

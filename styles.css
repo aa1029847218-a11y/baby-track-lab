@@ -170,6 +170,11 @@ button:hover, .file-btn:hover {
   grid-template-columns: repeat(3, 1fr);
 }
 
+.quality-toggle {
+  grid-template-columns: repeat(2, 1fr);
+  margin-top: 8px;
+}
+
 .switch-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;

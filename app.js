@@ -13,7 +13,7 @@ const state = {
   style: "frame",
   filter: "none",
   threshold: 128,
-  sample: 4,
+  sample: 3,
   minArea: 64,
   maxBlobs: 22,
   stroke: 1.5,
@@ -33,6 +33,9 @@ const state = {
   chunks: [],
   facingMode: "environment",
   cameraActive: false,
+  qualityMode: "quality",
+  renderWidth: 1920,
+  renderHeight: 1080,
 };
 
 const controls = [
@@ -77,6 +80,14 @@ document.querySelectorAll("[data-filter]").forEach((button) => {
     document.querySelectorAll("[data-filter]").forEach((item) => item.classList.remove("active"));
     button.classList.add("active");
     state.filter = button.dataset.filter;
+  });
+});
+
+document.querySelectorAll("[data-quality]").forEach((button) => {
+  button.addEventListener("click", async () => {
+    document.querySelectorAll("[data-quality]").forEach((item) => item.classList.remove("active"));
+    button.classList.add("active");
+    await setQualityMode(button.dataset.quality);
   });
 });
 
@@ -161,23 +172,57 @@ async function startCamera(facingMode) {
     video.removeAttribute("src");
     const stream = await navigator.mediaDevices.getUserMedia({
       audio: false,
-      video: {
-        facingMode: { ideal: nextMode },
-        width: { ideal: 1280 },
-        height: { ideal: 720 },
-      },
+      video: getCameraConstraints(nextMode),
     });
     video.srcObject = stream;
     await video.play();
     state.sourceType = "video";
     state.facingMode = nextMode;
     state.cameraActive = true;
-    statusEl.textContent = nextMode === "user" ? "前置摄像头" : "后置摄像头";
+    const settings = stream.getVideoTracks()[0]?.getSettings?.() || {};
+    const cameraName = nextMode === "user" ? "前置摄像头" : "后置摄像头";
+    statusEl.textContent = settings.width && settings.height
+      ? `${cameraName} ${settings.width}×${settings.height}`
+      : cameraName;
   } catch {
     state.cameraActive = false;
     statusEl.textContent = "摄像头不可用";
   }
   updateCameraButtons();
+}
+
+function getCameraConstraints(facingMode) {
+  const high = state.qualityMode === "quality";
+  return {
+    facingMode: { ideal: facingMode },
+    width: { ideal: high ? 1920 : 1280 },
+    height: { ideal: high ? 1080 : 720 },
+    frameRate: { ideal: high ? 30 : 60, max: 60 },
+  };
+}
+
+async function setQualityMode(mode) {
+  state.qualityMode = mode === "performance" ? "performance" : "quality";
+  const high = state.qualityMode === "quality";
+  setCanvasResolution(high ? 1920 : 1280, high ? 1080 : 720);
+  setRangeValue("sample", high ? 3 : 5);
+  statusEl.textContent = high ? "高清模式 1080p" : "流畅模式 720p";
+  if (state.cameraActive) await startCamera(state.facingMode);
+}
+
+function setCanvasResolution(width, height) {
+  state.renderWidth = width;
+  state.renderHeight = height;
+  canvas.width = width;
+  canvas.height = height;
+}
+
+function setRangeValue(id, value) {
+  const input = document.getElementById(id);
+  const output = document.getElementById(`${id}Out`);
+  state[id] = value;
+  input.value = String(value);
+  if (output) output.value = String(value);
 }
 
 async function flipCamera() {
