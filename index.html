@@ -36,6 +36,12 @@
             <button data-quality="quality" class="active" type="button">高清</button>
             <button data-quality="performance" type="button">流畅</button>
           </div>
+          <label>媒体尺寸 <output id="mediaSizeOut">100</output><input id="mediaSize" type="range" min="10" max="300" value="100"></label>
+          <div class="button-row">
+            <button id="fitCanvasBtn" type="button">适应画布</button>
+            <button id="fillCanvasBtn" type="button">填满画布</button>
+          </div>
+          <button id="deleteMediaBtn" type="button" class="wide">删除媒体</button>
         </section>
 
         <section class="control-block">
@@ -88,7 +94,7 @@
       </aside>
 
       <section class="stage-wrap">
-        <canvas id="output" width="1920" height="1080"></canvas>
+        <canvas id="output" width="1080" height="1920"></canvas>
         <video id="media" playsinline muted loop></video>
         <img id="imageSource" alt="">
         <canvas id="source" width="320" height="180"></canvas>
