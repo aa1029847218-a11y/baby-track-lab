@@ -25,6 +25,7 @@
               <input id="fileInput" type="file" accept="image/*,video/*">
             </label>
             <button id="cameraBtn" type="button">摄像头</button>
+            <button id="flipCameraBtn" type="button" disabled>翻转镜头</button>
           </div>
           <div class="button-row">
             <button id="playBtn" type="button">暂停</button>
@@ -87,6 +88,7 @@
           <span id="status">演示源运行中</span>
           <span id="blobCount">0 blobs</span>
         </div>
+        <button id="stageFlipBtn" class="stage-action" type="button" disabled aria-label="翻转前后置摄像头">翻转</button>
         <canvas id="output" width="1280" height="720"></canvas>
         <video id="media" playsinline muted loop></video>
         <img id="imageSource" alt="">

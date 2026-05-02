@@ -31,6 +31,8 @@ const state = {
   recording: false,
   recorder: null,
   chunks: [],
+  facingMode: "environment",
+  cameraActive: false,
 };
 
 const controls = [
@@ -101,17 +103,11 @@ document.getElementById("fileInput").addEventListener("change", async (event) =>
 });
 
 document.getElementById("cameraBtn").addEventListener("click", async () => {
-  try {
-    stopCameraTracks();
-    const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
-    video.srcObject = stream;
-    await video.play();
-    state.sourceType = "video";
-    statusEl.textContent = "摄像头输入";
-  } catch {
-    statusEl.textContent = "摄像头不可用";
-  }
+  await startCamera(state.facingMode);
 });
+
+document.getElementById("flipCameraBtn").addEventListener("click", flipCamera);
+document.getElementById("stageFlipBtn").addEventListener("click", flipCamera);
 
 document.getElementById("playBtn").addEventListener("click", (event) => {
   state.running = !state.running;
@@ -153,10 +149,58 @@ document.getElementById("recordBtn").addEventListener("click", () => {
 
 document.getElementById("resetBtn").addEventListener("click", () => location.reload());
 
+async function startCamera(facingMode) {
+  if (!navigator.mediaDevices?.getUserMedia) {
+    statusEl.textContent = "当前浏览器不支持摄像头";
+    return;
+  }
+  const nextMode = facingMode || state.facingMode;
+  try {
+    stopCameraTracks(false);
+    image.removeAttribute("src");
+    video.removeAttribute("src");
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: false,
+      video: {
+        facingMode: { ideal: nextMode },
+        width: { ideal: 1280 },
+        height: { ideal: 720 },
+      },
+    });
+    video.srcObject = stream;
+    await video.play();
+    state.sourceType = "video";
+    state.facingMode = nextMode;
+    state.cameraActive = true;
+    statusEl.textContent = nextMode === "user" ? "前置摄像头" : "后置摄像头";
+  } catch {
+    state.cameraActive = false;
+    statusEl.textContent = "摄像头不可用";
+  }
+  updateCameraButtons();
+}
+
+async function flipCamera() {
+  if (!state.cameraActive) return;
+  const nextMode = state.facingMode === "user" ? "environment" : "user";
+  await startCamera(nextMode);
+}
+
 function stopCameraTracks() {
   const stream = video.srcObject;
   if (stream) stream.getTracks().forEach((track) => track.stop());
   video.srcObject = null;
+  state.cameraActive = false;
+  updateCameraButtons();
+}
+
+function updateCameraButtons() {
+  const label = state.facingMode === "user" ? "切后置" : "切前置";
+  for (const id of ["flipCameraBtn", "stageFlipBtn"]) {
+    const button = document.getElementById(id);
+    button.disabled = !state.cameraActive;
+    button.textContent = label;
+  }
 }
 
 function render(time = 0) {
@@ -177,7 +221,7 @@ function drawSource(time) {
     ctx.fillStyle = "#000";
     ctx.fillRect(0, 0, w, h);
   } else if (state.sourceType === "video" && video.readyState >= 2) {
-    drawCover(video, w, h);
+    drawCover(video, w, h, state.cameraActive && state.facingMode === "user");
   } else if (state.sourceType === "image" && image.complete) {
     drawCover(image, w, h);
   } else {
@@ -185,12 +229,20 @@ function drawSource(time) {
   }
 }
 
-function drawCover(media, w, h) {
+function drawCover(media, w, h, mirror = false) {
   const mw = media.videoWidth || media.naturalWidth || w;
   const mh = media.videoHeight || media.naturalHeight || h;
   const scale = Math.max(w / mw, h / mh);
   const dw = mw * scale;
   const dh = mh * scale;
+  if (mirror) {
+    ctx.save();
+    ctx.translate(w, 0);
+    ctx.scale(-1, 1);
+    ctx.drawImage(media, (w - dw) / 2, (h - dh) / 2, dw, dh);
+    ctx.restore();
+    return;
+  }
   ctx.drawImage(media, (w - dw) / 2, (h - dh) / 2, dw, dh);
 }
 
