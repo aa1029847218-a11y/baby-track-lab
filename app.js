@@ -190,6 +190,7 @@ canvas.addEventListener("pointerdown", onPointerDown);
 canvas.addEventListener("pointermove", onPointerMove);
 canvas.addEventListener("pointerup", endInteraction);
 canvas.addEventListener("pointercancel", endInteraction);
+window.addEventListener("keydown", onKeyDown);
 
 function waitForVideo(video) {
   return new Promise((resolve) => {
@@ -359,6 +360,15 @@ function deleteSelectedMedia() {
   state.mediaObjects = state.mediaObjects.filter((item) => !ids.has(item.id));
   const nextObject = state.mediaObjects[state.mediaObjects.length - 1];
   selectObject(nextObject ? nextObject.id : null);
+}
+
+function onKeyDown(event) {
+  if (event.key !== "Backspace" && event.key !== "Delete") return;
+  const tagName = document.activeElement?.tagName?.toLowerCase();
+  if (["input", "textarea", "select", "button"].includes(tagName)) return;
+  if (selectedObjects().length === 0) return;
+  event.preventDefault();
+  deleteSelectedMedia();
 }
 
 function fitMediaObject(object, mode, paddingScale) {
