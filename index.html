@@ -30,6 +30,7 @@
           <div class="button-row">
             <button id="playBtn" type="button">暂停</button>
             <button id="snapshotBtn" type="button">导出 PNG</button>
+            <button id="exportSvgBtn" type="button">导出 SVG</button>
           </div>
           <button id="recordBtn" type="button" class="wide">录制 WebM</button>
           <div class="segmented quality-toggle" role="group" aria-label="画质模式">
@@ -63,20 +64,20 @@
           <label>连线率 <output id="linkOut">0.45</output><input id="linkRate" type="range" min="0" max="1" step="0.05" value="0.45"></label>
           <label>文字大小 <output id="fontOut">12</output><input id="fontSize" type="range" min="8" max="28" value="12"></label>
           <div class="segmented" role="group" aria-label="区域样式">
-            <button data-style="frame" class="active" type="button">Frame</button>
+            <button data-style="frame" type="button">Frame</button>
             <button data-style="cross" type="button">Cross</button>
-            <button data-style="scope" type="button">Scope</button>
+            <button data-style="scope" class="active" type="button">Scope</button>
             <button data-style="grid" type="button">Grid</button>
             <button data-style="label" type="button">Label</button>
             <button data-style="glow" type="button">Glow</button>
           </div>
           <div class="switch-grid">
-            <label><input id="showText" type="checkbox" checked> 标签</label>
+            <label><input id="showText" type="checkbox"> 标签</label>
             <label><input id="crazyColor" type="checkbox"> 随机色</label>
             <label><input id="blink" type="checkbox"> 闪烁</label>
             <label><input id="dashed" type="checkbox"> 虚线</label>
             <label><input id="hub" type="checkbox"> 中心枢纽</label>
-            <label><input id="showVideo" type="checkbox" checked> 底片</label>
+            <label><input id="hideTracking" type="checkbox"> 隐藏线和准星</label>
           </div>
         </section>
 

@@ -7,7 +7,7 @@ const blobCountEl = document.getElementById("blobCount");
 
 const state = {
   running: true,
-  style: "frame",
+  style: "scope",
   filter: "none",
   threshold: 128,
   sample: 3,
@@ -19,12 +19,12 @@ const state = {
   color: "#111111",
   invertMask: false,
   singleMode: false,
-  showText: true,
+  showText: false,
   crazyColor: false,
   blink: false,
   dashed: false,
   hub: false,
-  showVideo: true,
+  hideTracking: false,
   recording: false,
   recorder: null,
   chunks: [],
@@ -37,6 +37,7 @@ const state = {
   mediaObjects: [],
   selectedId: null,
   selectedIds: [],
+  lastBlobs: [],
   nextMediaId: 1,
   interaction: null,
 };
@@ -60,7 +61,7 @@ for (const [id, outId, cast] of controls) {
   });
 }
 
-for (const id of ["invertMask", "singleMode", "showText", "crazyColor", "blink", "dashed", "hub", "showVideo"]) {
+for (const id of ["invertMask", "singleMode", "showText", "crazyColor", "blink", "dashed", "hub", "hideTracking"]) {
   const input = document.getElementById(id);
   input.checked = Boolean(state[id]);
   input.addEventListener("change", (event) => {
@@ -144,6 +145,7 @@ document.getElementById("playBtn").addEventListener("click", (event) => {
 });
 
 document.getElementById("snapshotBtn").addEventListener("click", exportHighResolutionPng);
+document.getElementById("exportSvgBtn").addEventListener("click", exportConnectionSvg);
 
 document.getElementById("recordBtn").addEventListener("click", () => {
   if (state.recording) {
@@ -402,9 +404,10 @@ function render(time = 0) {
   resizeCanvasToDisplay();
   drawBaseScene(ctx, state.renderWidth, state.renderHeight, time);
   const blobs = detectBlobs();
+  state.lastBlobs = blobs;
   applyFilterToCanvas(ctx, canvas);
   ctx.setTransform(state.dpr, 0, 0, state.dpr, 0, 0);
-  drawTracking(ctx, state.renderWidth, state.renderHeight, blobs, time);
+  if (!state.hideTracking) drawTracking(ctx, state.renderWidth, state.renderHeight, blobs, time);
   drawSelectionHandles(ctx);
   if (blobCountEl) blobCountEl.textContent = `${blobs.length} blobs`;
   requestAnimationFrame(render);
@@ -412,11 +415,6 @@ function render(time = 0) {
 
 function drawBaseScene(targetCtx, width, height, time) {
   targetCtx.clearRect(0, 0, width, height);
-  if (!state.showVideo) {
-    targetCtx.fillStyle = "#e7e7e7";
-    targetCtx.fillRect(0, 0, width, height);
-    return;
-  }
   if (state.mediaObjects.length === 0) {
     drawDemo(targetCtx, time, width, height);
     return;
@@ -606,6 +604,31 @@ function drawConnections(targetCtx, width, height, blobs, color, time, useCenter
     }
   }
   targetCtx.restore();
+}
+
+function getConnectionSegments(blobs, width, height, useCenterHub) {
+  if (state.linkRate <= 0 || blobs.length < 2) return [];
+  const limit = Math.min(width, height) * state.linkRate;
+  const hub = { cx: width / 2, cy: height / 2, id: "center" };
+  const segments = [];
+  for (let i = 0; i < blobs.length; i++) {
+    const a = blobs[i];
+    const targets = useCenterHub ? [hub] : blobs.slice(i + 1);
+    for (const b of targets) {
+      const distance = Math.hypot(a.cx - b.cx, a.cy - b.cy);
+      if (distance > limit) continue;
+      segments.push({
+        x1: a.cx,
+        y1: a.cy,
+        x2: b.cx,
+        y2: b.cy,
+        from: a.id,
+        to: b.id,
+        distance,
+      });
+    }
+  }
+  return segments;
 }
 
 function normalizeColor(color) {
@@ -908,11 +931,122 @@ function exportHighResolutionPng() {
   drawBaseScene(offCtx, state.renderWidth, state.renderHeight, time);
   applyFilterToCanvas(offCtx, offscreen);
   offCtx.setTransform(multiplier, 0, 0, multiplier, 0, 0);
-  drawTracking(offCtx, state.renderWidth, state.renderHeight, detectBlobs(), time);
+  if (!state.hideTracking) drawTracking(offCtx, state.renderWidth, state.renderHeight, detectBlobs(), time);
   const link = document.createElement("a");
   link.download = `baby-track-${multiplier}x-${Date.now()}.png`;
   link.href = offscreen.toDataURL("image/png");
   link.click();
+}
+
+async function exportConnectionSvg() {
+  const blobs = state.lastBlobs.length ? state.lastBlobs : detectBlobs();
+  const width = state.renderWidth;
+  const height = state.renderHeight;
+  const color = normalizeColor(state.color);
+  const segments = getConnectionSegments(blobs, width, height, Boolean(state.hub));
+  const dash = state.dashed ? "10 8" : "";
+  const mediaImages = (await Promise.all(state.mediaObjects.map((object, index) => svgImageForMediaObject(object, index)))).join("\n");
+  const connectionLines = segments.map((segment, index) => {
+    return [
+      `  <line id="connection-${index + 1}"`,
+      `    x1="${roundSvg(segment.x1)}" y1="${roundSvg(segment.y1)}" x2="${roundSvg(segment.x2)}" y2="${roundSvg(segment.y2)}"`,
+      `    stroke="${escapeXml(color)}" stroke-width="${roundSvg(state.stroke)}" stroke-opacity="1" stroke-linecap="round" vector-effect="non-scaling-stroke"`,
+      dash ? `    stroke-dasharray="${dash}"` : "",
+      `    data-from="${escapeXml(String(segment.from))}" data-to="${escapeXml(String(segment.to))}" data-distance="${roundSvg(segment.distance)}" />`,
+    ].filter(Boolean).join("\n");
+  }).join("\n");
+  const scopes = blobs.map((blob) => svgScopeForBlob(blob, color, dash)).join("\n");
+  const svg = [
+    `<?xml version="1.0" encoding="UTF-8"?>`,
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${roundSvg(width)}" height="${roundSvg(height)}" viewBox="0 0 ${roundSvg(width)} ${roundSvg(height)}"`,
+    `  data-export-type="baby-track-connections" data-link-rate="${roundSvg(state.linkRate)}" data-center-hub="${Boolean(state.hub)}" data-dashed="${Boolean(state.dashed)}">`,
+    `  <metadata>${escapeXml(JSON.stringify({
+      editable: true,
+      stroke: color,
+      strokeWidth: state.stroke,
+      strokeDasharray: dash,
+      linkRate: state.linkRate,
+      centerHub: Boolean(state.hub),
+      canvasWidth: width,
+      canvasHeight: height,
+      mediaCount: state.mediaObjects.length,
+      connectionCount: segments.length,
+      scopeCount: blobs.length,
+    }))}</metadata>`,
+    `  <g id="media-layer" data-layer="media">`,
+    mediaImages || `    <!-- No media objects in canvas. -->`,
+    `  </g>`,
+    `  <g id="connections" data-layer="connections">`,
+    connectionLines || `    <!-- No connection lines generated with current settings. -->`,
+    `  </g>`,
+    `  <g id="scope-targets" data-layer="scope-targets">`,
+    scopes || `    <!-- No scope targets generated with current settings. -->`,
+    `  </g>`,
+    `</svg>`,
+  ].join("\n");
+  downloadText(`baby-track-scene-${Date.now()}.svg`, svg, "image/svg+xml");
+}
+
+async function svgImageForMediaObject(object, index) {
+  const href = mediaObjectToDataUrl(object);
+  const drawWidth = object.width * object.scale;
+  const drawHeight = object.height * object.scale;
+  const rotation = object.rotation * 180 / Math.PI;
+  const mirror = object.mirror ? " scale(-1 1)" : "";
+  return [
+    `    <image id="media-${index + 1}"`,
+    `      href="${href}" x="${roundSvg(-drawWidth / 2)}" y="${roundSvg(-drawHeight / 2)}" width="${roundSvg(drawWidth)}" height="${roundSvg(drawHeight)}" opacity="${roundSvg(object.opacity)}"`,
+    `      transform="translate(${roundSvg(object.x)} ${roundSvg(object.y)}) rotate(${roundSvg(rotation)})${mirror}"`,
+    `      data-media-id="${object.id}" data-media-type="${escapeXml(object.type)}" data-x="${roundSvg(object.x)}" data-y="${roundSvg(object.y)}" data-width="${roundSvg(object.width)}" data-height="${roundSvg(object.height)}" data-scale="${roundSvg(object.scale)}" data-rotation="${roundSvg(object.rotation)}" data-opacity="${roundSvg(object.opacity)}" />`,
+  ].join("\n");
+}
+
+function mediaObjectToDataUrl(object) {
+  const width = Math.max(1, Math.round(object.element.videoWidth || object.element.naturalWidth || object.width));
+  const height = Math.max(1, Math.round(object.element.videoHeight || object.element.naturalHeight || object.height));
+  const mediaCanvas = document.createElement("canvas");
+  mediaCanvas.width = width;
+  mediaCanvas.height = height;
+  const mediaCtx = mediaCanvas.getContext("2d");
+  mediaCtx.drawImage(object.element, 0, 0, width, height);
+  return mediaCanvas.toDataURL("image/png");
+}
+
+function svgScopeForBlob(blob, color, dash) {
+  const radius = Math.max(blob.w, blob.h) * 0.52;
+  const tick = 18;
+  const common = `stroke="${escapeXml(color)}" stroke-width="${roundSvg(state.stroke)}" stroke-opacity="1" stroke-linecap="round" fill="none" vector-effect="non-scaling-stroke"`;
+  const dashAttr = dash ? ` stroke-dasharray="${dash}"` : "";
+  return [
+    `    <g id="scope-${blob.id}" data-blob-id="${blob.id}" data-cx="${roundSvg(blob.cx)}" data-cy="${roundSvg(blob.cy)}" data-radius="${roundSvg(radius)}">`,
+    `      <circle cx="${roundSvg(blob.cx)}" cy="${roundSvg(blob.cy)}" r="${roundSvg(radius)}" ${common}${dashAttr} />`,
+    `      <line x1="${roundSvg(blob.cx - tick)}" y1="${roundSvg(blob.cy)}" x2="${roundSvg(blob.cx + tick)}" y2="${roundSvg(blob.cy)}" ${common}${dashAttr} />`,
+    `      <line x1="${roundSvg(blob.cx)}" y1="${roundSvg(blob.cy - tick)}" x2="${roundSvg(blob.cx)}" y2="${roundSvg(blob.cy + tick)}" ${common}${dashAttr} />`,
+    `    </g>`,
+  ].join("\n");
+}
+
+function roundSvg(value) {
+  return Number(value).toFixed(3).replace(/\.?0+$/, "");
+}
+
+function escapeXml(value) {
+  return value.replace(/[<>&"']/g, (char) => ({
+    "<": "&lt;",
+    ">": "&gt;",
+    "&": "&amp;",
+    "\"": "&quot;",
+    "'": "&apos;",
+  })[char]);
+}
+
+function downloadText(filename, text, mimeType) {
+  const blob = new Blob([text], { type: mimeType });
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(link.href);
 }
 
 function setStatus(message) {
