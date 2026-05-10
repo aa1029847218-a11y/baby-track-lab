@@ -16,7 +16,7 @@ const state = {
   stroke: 1.5,
   linkRate: 0.45,
   fontSize: 12,
-  color: "#ffffff",
+  color: "#111111",
   invertMask: false,
   singleMode: false,
   showText: true,
@@ -36,6 +36,7 @@ const state = {
   dpr: 1,
   mediaObjects: [],
   selectedId: null,
+  selectedIds: [],
   nextMediaId: 1,
   interaction: null,
 };
@@ -60,14 +61,21 @@ for (const [id, outId, cast] of controls) {
 }
 
 for (const id of ["invertMask", "singleMode", "showText", "crazyColor", "blink", "dashed", "hub", "showVideo"]) {
-  document.getElementById(id).addEventListener("change", (event) => {
+  const input = document.getElementById(id);
+  input.checked = Boolean(state[id]);
+  input.addEventListener("change", (event) => {
     state[id] = event.target.checked;
   });
 }
 
-document.getElementById("mainColor").addEventListener("input", (event) => {
-  state.color = event.target.value;
-});
+const mainColorInput = document.getElementById("mainColor");
+mainColorInput.value = state.color;
+mainColorInput.addEventListener("input", syncMainColor);
+mainColorInput.addEventListener("change", syncMainColor);
+
+function syncMainColor(event) {
+  state.color = normalizeColor(event.target.value);
+}
 
 document.querySelectorAll("[data-style]").forEach((button) => {
   button.addEventListener("click", () => {
@@ -94,9 +102,17 @@ document.querySelectorAll("[data-quality]").forEach((button) => {
 });
 
 document.getElementById("fileInput").addEventListener("change", async (event) => {
-  const file = event.target.files?.[0];
-  if (!file) return;
+  const files = Array.from(event.target.files || []);
+  if (files.length === 0) return;
   stopCameraTracks();
+  for (const file of files) {
+    await importMediaFile(file);
+  }
+  setStatus(`${files.length} media imported`);
+  event.target.value = "";
+});
+
+async function importMediaFile(file) {
   const url = URL.createObjectURL(file);
   if (file.type.startsWith("video/")) {
     const video = document.createElement("video");
@@ -107,16 +123,13 @@ document.getElementById("fileInput").addEventListener("change", async (event) =>
     await waitForVideo(video);
     await video.play().catch(() => {});
     addMediaObject({ type: "video", element: video, naturalWidth: video.videoWidth, naturalHeight: video.videoHeight });
-    setStatus("Video imported");
   } else {
     const image = new Image();
     image.src = url;
     await image.decode();
     addMediaObject({ type: "image", element: image, naturalWidth: image.naturalWidth, naturalHeight: image.naturalHeight });
-    setStatus("Image imported");
   }
-  event.target.value = "";
-});
+}
 
 document.getElementById("cameraBtn").addEventListener("click", async () => {
   await startCamera(state.facingMode);
@@ -160,9 +173,12 @@ document.getElementById("recordBtn").addEventListener("click", () => {
 document.getElementById("resetBtn").addEventListener("click", () => location.reload());
 
 document.getElementById("mediaSize").addEventListener("input", (event) => {
-  const object = selectedObject();
-  if (!object) return;
-  object.scale = Number(event.target.value) / 100;
+  const objects = selectedObjects();
+  if (objects.length === 0) return;
+  const scale = Number(event.target.value) / 100;
+  objects.forEach((object) => {
+    object.scale = scale;
+  });
   updateMediaSizeOutput();
 });
 
@@ -208,6 +224,7 @@ function addMediaObject({ type, element, naturalWidth, naturalHeight, camera = f
   });
   state.mediaObjects.push(object);
   state.selectedId = object.id;
+  state.selectedIds = [object.id];
   fitMediaObject(object, "contain", 0.82);
   updateMediaSizeOutput();
   return object;
@@ -305,12 +322,16 @@ function updateCameraButtons() {
 }
 
 function selectedObject() {
-  return state.mediaObjects.find((object) => object.id === state.selectedId) || null;
+  return state.mediaObjects.find((object) => object.id === state.selectedId) || selectedObjects().at(-1) || null;
+}
+
+function selectedObjects() {
+  return state.mediaObjects.filter((object) => state.selectedIds.includes(object.id));
 }
 
 function updateMediaSizeOutput() {
-  const object = selectedObject();
-  const value = object ? Math.round(object.scale * 100) : 100;
+  const objects = selectedObjects();
+  const value = objects.length ? Math.round(objects.reduce((sum, object) => sum + object.scale, 0) / objects.length * 100) : 100;
   const input = document.getElementById("mediaSize");
   const output = document.getElementById("mediaSizeOut");
   input.value = String(Math.max(10, Math.min(300, value)));
@@ -318,21 +339,24 @@ function updateMediaSizeOutput() {
 }
 
 function fitSelectedMedia(mode) {
-  const object = selectedObject();
-  if (!object) return;
-  fitMediaObject(object, mode, 1);
+  const objects = selectedObjects();
+  if (objects.length === 0) return;
+  objects.forEach((object) => fitMediaObject(object, mode, 1));
   updateMediaSizeOutput();
 }
 
 function deleteSelectedMedia() {
-  const object = selectedObject();
-  if (!object) return;
-  if (object.camera && object.element?.srcObject) {
-    object.element.srcObject.getTracks().forEach((track) => track.stop());
-    state.cameraActive = false;
-    updateCameraButtons();
+  const objects = selectedObjects();
+  if (objects.length === 0) return;
+  const ids = new Set(objects.map((object) => object.id));
+  for (const object of objects) {
+    if (object.camera && object.element?.srcObject) {
+      object.element.srcObject.getTracks().forEach((track) => track.stop());
+      state.cameraActive = false;
+      updateCameraButtons();
+    }
   }
-  state.mediaObjects = state.mediaObjects.filter((item) => item.id !== object.id);
+  state.mediaObjects = state.mediaObjects.filter((item) => !ids.has(item.id));
   const nextObject = state.mediaObjects[state.mediaObjects.length - 1];
   selectObject(nextObject ? nextObject.id : null);
 }
@@ -366,9 +390,9 @@ function render(time = 0) {
   if (!state.running) return;
   resizeCanvasToDisplay();
   drawBaseScene(ctx, state.renderWidth, state.renderHeight, time);
+  const blobs = detectBlobs();
   applyFilterToCanvas(ctx, canvas);
   ctx.setTransform(state.dpr, 0, 0, state.dpr, 0, 0);
-  const blobs = detectBlobs();
   drawTracking(ctx, state.renderWidth, state.renderHeight, blobs, time);
   drawSelectionHandles(ctx);
   if (blobCountEl) blobCountEl.textContent = `${blobs.length} blobs`;
@@ -378,7 +402,7 @@ function render(time = 0) {
 function drawBaseScene(targetCtx, width, height, time) {
   targetCtx.clearRect(0, 0, width, height);
   if (!state.showVideo) {
-    targetCtx.fillStyle = "#000";
+    targetCtx.fillStyle = "#e7e7e7";
     targetCtx.fillRect(0, 0, width, height);
     return;
   }
@@ -386,7 +410,7 @@ function drawBaseScene(targetCtx, width, height, time) {
     drawDemo(targetCtx, time, width, height);
     return;
   }
-  targetCtx.fillStyle = "#000";
+  targetCtx.fillStyle = "#e7e7e7";
   targetCtx.fillRect(0, 0, width, height);
   for (const object of state.mediaObjects) {
     drawMediaObject(targetCtx, object);
@@ -441,25 +465,12 @@ function applyFilterToCanvas(targetCtx, targetCanvas) {
       data[i] = 255 - r;
       data[i + 1] = 255 - g;
       data[i + 2] = 255 - b;
-    } else if (state.filter === "thermal") {
-      data[i] = Math.min(255, gray * 1.7);
-      data[i + 1] = Math.min(255, 80 + Math.abs(gray - 130) * 1.2);
-      data[i + 2] = Math.max(0, 255 - gray * 1.5);
-    } else if (state.filter === "edge") {
-      const v = gray > 148 ? 255 : 20;
-      data[i] = v;
-      data[i + 1] = v;
-      data[i + 2] = v;
     } else if (state.filter === "crt") {
       const y = Math.floor(i / 4 / targetCanvas.width);
       const scan = y % 4 < 2 ? 0.78 : 1;
       data[i] = r * scan;
       data[i + 1] = g * scan;
       data[i + 2] = b * scan;
-    } else if (state.filter === "pixel") {
-      data[i] = Math.round(r / 32) * 32;
-      data[i + 1] = Math.round(g / 32) * 32;
-      data[i + 2] = Math.round(b / 32) * 32;
     }
   }
   targetCtx.putImageData(img, 0, 0);
@@ -501,8 +512,13 @@ function detectBlobs() {
 
 function passes(data, pixelIndex) {
   const i = pixelIndex * 4;
+  if (isBackgroundPixel(data[i], data[i + 1], data[i + 2])) return false;
   const gray = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
   return state.invertMask ? gray < state.threshold : gray > state.threshold;
+}
+
+function isBackgroundPixel(r, g, b) {
+  return Math.abs(r - 231) <= 4 && Math.abs(g - 231) <= 4 && Math.abs(b - 231) <= 4;
 }
 
 function flood(start, width, height, data, visited) {
@@ -537,14 +553,14 @@ function flood(start, width, height, data, visited) {
 }
 
 function drawTracking(targetCtx, width, height, blobs, time) {
-  const color = state.color;
+  const color = normalizeColor(state.color);
   targetCtx.save();
   targetCtx.lineWidth = state.stroke;
   targetCtx.font = `${state.fontSize}px ui-monospace, SFMono-Regular, Menlo, monospace`;
   targetCtx.textBaseline = "top";
   targetCtx.setLineDash(state.dashed ? [10, 8] : []);
   if (state.blink && Math.floor(time / 140) % 3 === 0) targetCtx.globalAlpha = 0.2;
-  drawConnections(targetCtx, width, height, blobs, color, time);
+  drawConnections(targetCtx, width, height, blobs, color, time, Boolean(state.hub));
   for (const blob of blobs) {
     const c = state.crazyColor ? `hsl(${blob.hue}, 90%, 65%)` : color;
     targetCtx.strokeStyle = c;
@@ -557,31 +573,32 @@ function drawTracking(targetCtx, width, height, blobs, time) {
   targetCtx.restore();
 }
 
-function drawConnections(targetCtx, width, height, blobs, color, time) {
+function drawConnections(targetCtx, width, height, blobs, color, time, useCenterHub) {
   if (state.linkRate <= 0 || blobs.length < 2) return;
   targetCtx.save();
   targetCtx.strokeStyle = color;
-  targetCtx.globalAlpha = 0.65;
+  targetCtx.globalAlpha = 1;
+  targetCtx.globalCompositeOperation = "source-over";
+  targetCtx.shadowBlur = 0;
+  targetCtx.setLineDash(state.dashed ? [10, 8] : []);
   const hub = { cx: width / 2, cy: height / 2 };
   for (let i = 0; i < blobs.length; i++) {
     const a = blobs[i];
-    const targets = state.hub ? [hub] : blobs.slice(i + 1);
+    const targets = useCenterHub ? [hub] : blobs.slice(i + 1);
     for (const b of targets) {
       const d = Math.hypot(a.cx - b.cx, a.cy - b.cy);
       if (d > Math.min(width, height) * state.linkRate) continue;
       targetCtx.beginPath();
       targetCtx.moveTo(a.cx, a.cy);
-      if (state.style === "scope") {
-        const mx = (a.cx + b.cx) / 2 + Math.sin(time * 0.004 + i) * 24;
-        const my = (a.cy + b.cy) / 2 + Math.cos(time * 0.004 + i) * 24;
-        targetCtx.quadraticCurveTo(mx, my, b.cx, b.cy);
-      } else {
-        targetCtx.lineTo(b.cx, b.cy);
-      }
+      targetCtx.lineTo(b.cx, b.cy);
       targetCtx.stroke();
     }
   }
   targetCtx.restore();
+}
+
+function normalizeColor(color) {
+  return /^#[0-9a-f]{6}$/i.test(color) ? color : "#ffffff";
 }
 
 function drawRegion(targetCtx, blob, time) {
@@ -591,7 +608,7 @@ function drawRegion(targetCtx, blob, time) {
   const h = blob.h;
   const cx = blob.cx;
   const cy = blob.cy;
-  const tick = 12 + Math.sin(time * 0.006 + blob.id) * 4;
+  const tick = 12;
   if (state.style === "cross") {
     targetCtx.beginPath();
     targetCtx.moveTo(cx - w / 2, cy);
@@ -669,15 +686,36 @@ function drawLabel(targetCtx, blob, color, width) {
 }
 
 function drawSelectionHandles(targetCtx) {
-  const object = selectedObject();
-  if (!object) return;
-  const box = objectBox(object);
+  const objects = selectedObjects();
   targetCtx.save();
+  if (state.interaction?.mode === "select") {
+    const rect = normalizedRect(state.interaction.startX, state.interaction.startY, state.interaction.currentX, state.interaction.currentY);
+    targetCtx.fillStyle = "rgba(113, 246, 199, 0.12)";
+    targetCtx.strokeStyle = "#71f6c7";
+    targetCtx.lineWidth = 1.5;
+    targetCtx.setLineDash([5, 4]);
+    targetCtx.fillRect(rect.x, rect.y, rect.w, rect.h);
+    targetCtx.strokeRect(rect.x, rect.y, rect.w, rect.h);
+  }
+  if (objects.length === 0) {
+    targetCtx.restore();
+    return;
+  }
+  const box = groupBox(objects);
   targetCtx.strokeStyle = "#71f6c7";
   targetCtx.fillStyle = "#07110e";
   targetCtx.lineWidth = 1.5;
+  targetCtx.globalAlpha = 1;
   targetCtx.setLineDash([6, 5]);
   targetCtx.strokeRect(box.x, box.y, box.w, box.h);
+  if (objects.length > 1) {
+    targetCtx.globalAlpha = 0.5;
+    for (const object of objects) {
+      const itemBox = objectBox(object);
+      targetCtx.strokeRect(itemBox.x, itemBox.y, itemBox.w, itemBox.h);
+    }
+    targetCtx.globalAlpha = 1;
+  }
   targetCtx.setLineDash([]);
   targetCtx.fillRect(box.x + box.w - 8, box.y + box.h - 8, 16, 16);
   targetCtx.strokeRect(box.x + box.w - 8, box.y + box.h - 8, 16, 16);
@@ -690,6 +728,21 @@ function objectBox(object) {
   return { x: object.x - w / 2, y: object.y - h / 2, w, h };
 }
 
+function groupBox(objects) {
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const object of objects) {
+    const box = objectBox(object);
+    minX = Math.min(minX, box.x);
+    minY = Math.min(minY, box.y);
+    maxX = Math.max(maxX, box.x + box.w);
+    maxY = Math.max(maxY, box.y + box.h);
+  }
+  return { x: minX, y: minY, w: maxX - minX, h: maxY - minY };
+}
+
 function canvasPoint(event) {
   const rect = canvas.getBoundingClientRect();
   return {
@@ -700,43 +753,97 @@ function canvasPoint(event) {
 
 function onPointerDown(event) {
   const point = canvasPoint(event);
+  const selected = selectedObjects();
+  const selectedBox = selected.length ? groupBox(selected) : null;
+  if (selectedBox && isResizeHandle(point, selectedBox)) {
+    canvas.setPointerCapture(event.pointerId);
+    state.interaction = {
+      mode: "resizeGroup",
+      startX: point.x,
+      startY: point.y,
+      anchorX: selectedBox.x,
+      anchorY: selectedBox.y,
+      startDistance: Math.max(8, Math.hypot(point.x - selectedBox.x, point.y - selectedBox.y)),
+      objects: selected.map((object) => ({
+        id: object.id,
+        x: object.x,
+        y: object.y,
+        scale: object.scale,
+      })),
+    };
+    return;
+  }
   const hit = hitTest(point);
   if (!hit.object) {
+    canvas.setPointerCapture(event.pointerId);
+    state.interaction = {
+      mode: "select",
+      startX: point.x,
+      startY: point.y,
+      currentX: point.x,
+      currentY: point.y,
+    };
     selectObject(null);
     return;
   }
-  selectObject(hit.object.id);
+  if (!state.selectedIds.includes(hit.object.id)) {
+    selectObject(hit.object.id);
+  }
   canvas.setPointerCapture(event.pointerId);
-  const box = objectBox(hit.object);
   state.interaction = {
-    mode: hit.handle ? "resize" : "drag",
-    id: hit.object.id,
+    mode: "dragGroup",
     startX: point.x,
     startY: point.y,
-    objectX: hit.object.x,
-    objectY: hit.object.y,
-    startScale: hit.object.scale,
-    startDistance: Math.max(8, Math.hypot(point.x - box.x, point.y - box.y)),
+    objects: selectedObjects().map((object) => ({
+      id: object.id,
+      x: object.x,
+      y: object.y,
+      scale: object.scale,
+    })),
   };
 }
 
 function onPointerMove(event) {
   if (!state.interaction) return;
-  const object = selectedObject();
-  if (!object) return;
   const point = canvasPoint(event);
-  if (state.interaction.mode === "drag") {
-    object.x = state.interaction.objectX + point.x - state.interaction.startX;
-    object.y = state.interaction.objectY + point.y - state.interaction.startY;
-  } else {
-    const box = objectBox({ ...object, scale: state.interaction.startScale });
-    const distance = Math.max(8, Math.hypot(point.x - box.x, point.y - box.y));
-    object.scale = Math.max(0.05, state.interaction.startScale * (distance / state.interaction.startDistance));
+  if (state.interaction.mode === "select") {
+    state.interaction.currentX = point.x;
+    state.interaction.currentY = point.y;
+    return;
+  }
+  if (state.interaction.mode === "dragGroup") {
+    const dx = point.x - state.interaction.startX;
+    const dy = point.y - state.interaction.startY;
+    for (const snapshot of state.interaction.objects) {
+      const object = state.mediaObjects.find((item) => item.id === snapshot.id);
+      if (!object) continue;
+      object.x = snapshot.x + dx;
+      object.y = snapshot.y + dy;
+    }
+    return;
+  }
+  if (state.interaction.mode === "resizeGroup") {
+    const distance = Math.max(8, Math.hypot(point.x - state.interaction.anchorX, point.y - state.interaction.anchorY));
+    const factor = Math.max(0.05, distance / state.interaction.startDistance);
+    for (const snapshot of state.interaction.objects) {
+      const object = state.mediaObjects.find((item) => item.id === snapshot.id);
+      if (!object) continue;
+      object.x = state.interaction.anchorX + (snapshot.x - state.interaction.anchorX) * factor;
+      object.y = state.interaction.anchorY + (snapshot.y - state.interaction.anchorY) * factor;
+      object.scale = Math.max(0.05, snapshot.scale * factor);
+    }
     updateMediaSizeOutput();
   }
 }
 
 function endInteraction(event) {
+  if (state.interaction?.mode === "select") {
+    const rect = normalizedRect(state.interaction.startX, state.interaction.startY, state.interaction.currentX, state.interaction.currentY);
+    const ids = state.mediaObjects
+      .filter((object) => rectsIntersect(rect, objectBox(object)))
+      .map((object) => object.id);
+    selectObjects(ids);
+  }
   if (state.interaction) canvas.releasePointerCapture?.(event.pointerId);
   state.interaction = null;
 }
@@ -745,19 +852,37 @@ function hitTest(point) {
   for (let i = state.mediaObjects.length - 1; i >= 0; i--) {
     const object = state.mediaObjects[i];
     const box = objectBox(object);
-    const onHandle = point.x >= box.x + box.w - 24 && point.x <= box.x + box.w + 16 && point.y >= box.y + box.h - 24 && point.y <= box.y + box.h + 16;
     const inside = point.x >= box.x && point.x <= box.x + box.w && point.y >= box.y && point.y <= box.y + box.h;
-    if (onHandle || inside) return { object, handle: onHandle };
+    if (inside) return { object, handle: false };
   }
   return { object: null, handle: false };
 }
 
 function selectObject(id) {
-  state.selectedId = id;
+  selectObjects(id ? [id] : []);
+}
+
+function selectObjects(ids) {
+  state.selectedIds = ids;
+  state.selectedId = ids.at(-1) || null;
   state.mediaObjects.forEach((object) => {
-    object.selected = object.id === id;
+    object.selected = state.selectedIds.includes(object.id);
   });
   updateMediaSizeOutput();
+}
+
+function isResizeHandle(point, box) {
+  return point.x >= box.x + box.w - 24 && point.x <= box.x + box.w + 16 && point.y >= box.y + box.h - 24 && point.y <= box.y + box.h + 16;
+}
+
+function normalizedRect(x1, y1, x2, y2) {
+  const x = Math.min(x1, x2);
+  const y = Math.min(y1, y2);
+  return { x, y, w: Math.abs(x2 - x1), h: Math.abs(y2 - y1) };
+}
+
+function rectsIntersect(a, b) {
+  return a.x <= b.x + b.w && a.x + a.w >= b.x && a.y <= b.y + b.h && a.y + a.h >= b.y;
 }
 
 function exportHighResolutionPng() {

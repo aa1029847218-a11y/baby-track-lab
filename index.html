@@ -22,7 +22,7 @@
           <div class="button-row">
             <label class="file-btn">
               导入媒体
-              <input id="fileInput" type="file" accept="image/*,video/*">
+              <input id="fileInput" type="file" accept="image/*,video/*" multiple>
             </label>
             <button id="cameraBtn" type="button">摄像头</button>
             <button id="flipCameraBtn" type="button" disabled>翻转镜头</button>
@@ -58,7 +58,7 @@
 
         <section class="control-block">
           <h2>视觉</h2>
-          <label>主颜色 <input id="mainColor" type="color" value="#ffffff"></label>
+          <label>主颜色 <input id="mainColor" type="color" value="#111111"></label>
           <label>线宽 <output id="strokeOut">1.5</output><input id="stroke" type="range" min="0.5" max="6" step="0.5" value="1.5"></label>
           <label>连线率 <output id="linkOut">0.45</output><input id="linkRate" type="range" min="0" max="1" step="0.05" value="0.45"></label>
           <label>文字大小 <output id="fontOut">12</output><input id="fontSize" type="range" min="8" max="28" value="12"></label>
@@ -85,9 +85,6 @@
           <div class="segmented filters" role="group" aria-label="滤镜">
             <button data-filter="none" class="active" type="button">None</button>
             <button data-filter="invert" type="button">Invert</button>
-            <button data-filter="thermal" type="button">Thermal</button>
-            <button data-filter="pixel" type="button">Pixel</button>
-            <button data-filter="edge" type="button">Edge</button>
             <button data-filter="crt" type="button">CRT</button>
           </div>
         </section>
