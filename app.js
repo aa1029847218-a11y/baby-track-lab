@@ -363,7 +363,8 @@ function deleteSelectedMedia() {
 }
 
 function onKeyDown(event) {
-  if (event.key !== "Backspace" && event.key !== "Delete") return;
+  const isDeleteKey = event.key === "Backspace" || event.key === "Delete" || event.code === "Backspace" || event.code === "Delete" || event.keyCode === 8 || event.keyCode === 46;
+  if (!isDeleteKey) return;
   const tagName = document.activeElement?.tagName?.toLowerCase();
   if (["input", "textarea", "select", "button"].includes(tagName)) return;
   if (selectedObjects().length === 0) return;
@@ -762,6 +763,7 @@ function canvasPoint(event) {
 }
 
 function onPointerDown(event) {
+  canvas.focus({ preventScroll: true });
   const point = canvasPoint(event);
   const selected = selectedObjects();
   const selectedBox = selected.length ? groupBox(selected) : null;
