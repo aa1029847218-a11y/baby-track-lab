@@ -4,6 +4,11 @@ const sourceCanvas = document.getElementById("source");
 const sourceCtx = sourceCanvas.getContext("2d", { willReadFrequently: true });
 const statusEl = document.getElementById("status") || { textContent: "" };
 const blobCountEl = document.getElementById("blobCount");
+const CANVAS_PRESETS = {
+  portrait: { width: 1080, height: 1920, ratio: "9 / 16" },
+  landscape: { width: 1920, height: 1080, ratio: "16 / 9" },
+};
+const DEFAULT_ORIENTATION = "portrait";
 
 const state = {
   running: true,
@@ -31,8 +36,9 @@ const state = {
   facingMode: "environment",
   cameraActive: false,
   qualityMode: "quality",
-  renderWidth: 1,
-  renderHeight: 1,
+  orientation: DEFAULT_ORIENTATION,
+  renderWidth: CANVAS_PRESETS[DEFAULT_ORIENTATION].width,
+  renderHeight: CANVAS_PRESETS[DEFAULT_ORIENTATION].height,
   dpr: 1,
   mediaObjects: [],
   selectedId: null,
@@ -99,6 +105,12 @@ document.querySelectorAll("[data-quality]").forEach((button) => {
     document.querySelectorAll("[data-quality]").forEach((item) => item.classList.remove("active"));
     button.classList.add("active");
     await setQualityMode(button.dataset.quality);
+  });
+});
+
+document.querySelectorAll("[data-orientation]").forEach((button) => {
+  button.addEventListener("click", () => {
+    setCanvasOrientation(button.dataset.orientation);
   });
 });
 
@@ -193,6 +205,8 @@ canvas.addEventListener("pointermove", onPointerMove);
 canvas.addEventListener("pointerup", endInteraction);
 canvas.addEventListener("pointercancel", endInteraction);
 window.addEventListener("keydown", onKeyDown);
+window.addEventListener("resize", syncCanvasDisplayRatio);
+window.visualViewport?.addEventListener("resize", syncCanvasDisplayRatio);
 
 function waitForVideo(video) {
   return new Promise((resolve) => {
@@ -382,21 +396,72 @@ function fitMediaObject(object, mode, paddingScale) {
   object.y = state.renderHeight / 2;
 }
 
+function currentCanvasPreset() {
+  return CANVAS_PRESETS[state.orientation] || CANVAS_PRESETS[DEFAULT_ORIENTATION];
+}
+
+function setCanvasOrientation(orientation) {
+  if (!CANVAS_PRESETS[orientation] || orientation === state.orientation) return;
+  const oldWidth = state.renderWidth;
+  const oldHeight = state.renderHeight;
+  const nextPreset = CANVAS_PRESETS[orientation];
+  const scaleX = nextPreset.width / oldWidth;
+  const scaleY = nextPreset.height / oldHeight;
+  const sizeScale = Math.min(scaleX, scaleY);
+  state.orientation = orientation;
+  state.renderWidth = nextPreset.width;
+  state.renderHeight = nextPreset.height;
+  for (const object of state.mediaObjects) {
+    object.x *= scaleX;
+    object.y *= scaleY;
+    object.scale *= sizeScale;
+  }
+  document.querySelectorAll("[data-orientation]").forEach((button) => {
+    button.classList.toggle("active", button.dataset.orientation === orientation);
+  });
+  applyCanvasDisplayPreset();
+  syncCanvasDisplayRatio();
+  updateMediaSizeOutput();
+}
+
+function applyCanvasDisplayPreset() {
+  const preset = currentCanvasPreset();
+  const aspect = preset.width / preset.height;
+  document.documentElement.style.setProperty("--canvas-aspect", String(aspect));
+  document.documentElement.style.setProperty("--canvas-ratio", preset.ratio);
+  canvas.style.aspectRatio = preset.ratio;
+  const backingWidth = Math.round(preset.width * state.dpr);
+  const backingHeight = Math.round(preset.height * state.dpr);
+  if (canvas.width !== backingWidth) canvas.width = backingWidth;
+  if (canvas.height !== backingHeight) canvas.height = backingHeight;
+}
+
 function resizeCanvasToDisplay() {
-  const rect = canvas.getBoundingClientRect();
+  const preset = currentCanvasPreset();
   const dpr = Math.max(1, Math.min(window.devicePixelRatio || 1, state.qualityMode === "quality" ? 3 : 2));
-  const width = Math.max(1, Math.round(rect.width));
-  const height = Math.max(1, Math.round(rect.height));
-  const backingWidth = Math.round(width * dpr);
-  const backingHeight = Math.round(height * dpr);
+  const backingWidth = Math.round(preset.width * dpr);
+  const backingHeight = Math.round(preset.height * dpr);
   if (canvas.width !== backingWidth || canvas.height !== backingHeight) {
     canvas.width = backingWidth;
     canvas.height = backingHeight;
   }
-  state.renderWidth = width;
-  state.renderHeight = height;
+  state.renderWidth = preset.width;
+  state.renderHeight = preset.height;
   state.dpr = dpr;
+  applyCanvasDisplayPreset();
+  syncCanvasDisplayRatio();
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+
+function syncCanvasDisplayRatio() {
+  const preset = currentCanvasPreset();
+  const aspect = preset.width / preset.height;
+  const rect = canvas.getBoundingClientRect();
+  if (!rect.width) return;
+  const expectedHeight = rect.width / aspect;
+  if (Math.abs(rect.height - expectedHeight) > 0.5) {
+    canvas.style.height = `${expectedHeight}px`;
+  }
 }
 
 function render(time = 0) {
@@ -779,9 +844,11 @@ function groupBox(objects) {
 
 function canvasPoint(event) {
   const rect = canvas.getBoundingClientRect();
+  const preset = currentCanvasPreset();
+  const displayHeight = rect.width / (preset.width / preset.height) || rect.height;
   return {
     x: ((event.clientX - rect.left) / rect.width) * state.renderWidth,
-    y: ((event.clientY - rect.top) / rect.height) * state.renderHeight,
+    y: ((event.clientY - rect.top) / displayHeight) * state.renderHeight,
   };
 }
 
