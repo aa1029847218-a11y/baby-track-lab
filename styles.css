@@ -215,7 +215,7 @@ button:hover, .file-btn:hover {
 }
 
 #output {
-  width: min(100%, calc((100vh - 16px) * var(--canvas-aspect)));
+  width: 100%;
   height: auto;
   max-height: none;
   aspect-ratio: var(--canvas-ratio);

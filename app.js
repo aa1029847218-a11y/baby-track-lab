@@ -9,6 +9,7 @@ const CANVAS_PRESETS = {
   landscape: { width: 1920, height: 1080, ratio: "16 / 9" },
 };
 const DEFAULT_ORIENTATION = "portrait";
+const CENTER_SNAP_THRESHOLD = 24;
 
 const state = {
   running: true,
@@ -46,6 +47,7 @@ const state = {
   lastBlobs: [],
   nextMediaId: 1,
   interaction: null,
+  snapGuides: null,
 };
 
 const controls = [
@@ -636,7 +638,7 @@ function drawTracking(targetCtx, width, height, blobs, time) {
   if (state.blink && Math.floor(time / 140) % 3 === 0) targetCtx.globalAlpha = 0.2;
   drawConnections(targetCtx, width, height, blobs, color, time, Boolean(state.hub));
   for (const blob of blobs) {
-    const c = state.crazyColor ? `hsl(${blob.hue}, 90%, 65%)` : color;
+    const c = blobColor(blob, color);
     targetCtx.strokeStyle = c;
     targetCtx.fillStyle = c;
     targetCtx.shadowColor = state.style === "glow" ? c : "transparent";
@@ -650,7 +652,6 @@ function drawTracking(targetCtx, width, height, blobs, time) {
 function drawConnections(targetCtx, width, height, blobs, color, time, useCenterHub) {
   if (state.linkRate <= 0 || blobs.length < 2) return;
   targetCtx.save();
-  targetCtx.strokeStyle = color;
   targetCtx.globalAlpha = 1;
   targetCtx.globalCompositeOperation = "source-over";
   targetCtx.shadowBlur = 0;
@@ -662,6 +663,7 @@ function drawConnections(targetCtx, width, height, blobs, color, time, useCenter
     for (const b of targets) {
       const d = Math.hypot(a.cx - b.cx, a.cy - b.cy);
       if (d > Math.min(width, height) * state.linkRate) continue;
+      targetCtx.strokeStyle = connectionColor(a, b, color);
       targetCtx.beginPath();
       targetCtx.moveTo(a.cx, a.cy);
       targetCtx.lineTo(b.cx, b.cy);
@@ -700,6 +702,18 @@ function normalizeColor(color) {
   return /^#[0-9a-f]{6}$/i.test(color) ? color : "#ffffff";
 }
 
+function blobColor(blob, fallback) {
+  return state.crazyColor && blob ? `hsl(${blob.hue}, 90%, 65%)` : fallback;
+}
+
+function connectionColor(a, b, fallback) {
+  if (!state.crazyColor) return fallback;
+  if (!a) return fallback;
+  if (!b || b.id === "center") return blobColor(a, fallback);
+  const hue = ((a.hue || 0) + (b.hue || 0)) / 2;
+  return `hsl(${hue}, 90%, 65%)`;
+}
+
 function drawRegion(targetCtx, blob, time) {
   const x = blob.x;
   const y = blob.y;
@@ -719,12 +733,13 @@ function drawRegion(targetCtx, blob, time) {
     return;
   }
   if (state.style === "scope") {
+    const scopeTick = 8;
     targetCtx.beginPath();
     targetCtx.arc(cx, cy, Math.max(w, h) * 0.52, 0, Math.PI * 2);
-    targetCtx.moveTo(cx - tick * 1.5, cy);
-    targetCtx.lineTo(cx + tick * 1.5, cy);
-    targetCtx.moveTo(cx, cy - tick * 1.5);
-    targetCtx.lineTo(cx, cy + tick * 1.5);
+    targetCtx.moveTo(cx - scopeTick, cy);
+    targetCtx.lineTo(cx + scopeTick, cy);
+    targetCtx.moveTo(cx, cy - scopeTick);
+    targetCtx.lineTo(cx, cy + scopeTick);
     targetCtx.stroke();
     return;
   }
@@ -787,6 +802,7 @@ function drawLabel(targetCtx, blob, color, width) {
 function drawSelectionHandles(targetCtx) {
   const objects = selectedObjects();
   targetCtx.save();
+  drawSnapGuides(targetCtx);
   if (state.interaction?.mode === "select") {
     const rect = normalizedRect(state.interaction.startX, state.interaction.startY, state.interaction.currentX, state.interaction.currentY);
     targetCtx.fillStyle = "rgba(113, 246, 199, 0.12)";
@@ -818,6 +834,29 @@ function drawSelectionHandles(targetCtx) {
   targetCtx.setLineDash([]);
   targetCtx.fillRect(box.x + box.w - 8, box.y + box.h - 8, 16, 16);
   targetCtx.strokeRect(box.x + box.w - 8, box.y + box.h - 8, 16, 16);
+  targetCtx.restore();
+}
+
+function drawSnapGuides(targetCtx) {
+  if (!state.snapGuides) return;
+  targetCtx.save();
+  targetCtx.strokeStyle = "rgba(113, 246, 199, 0.72)";
+  targetCtx.lineWidth = 1;
+  targetCtx.setLineDash([12, 10]);
+  if (state.snapGuides.vertical) {
+    const x = state.renderWidth / 2;
+    targetCtx.beginPath();
+    targetCtx.moveTo(x, 0);
+    targetCtx.lineTo(x, state.renderHeight);
+    targetCtx.stroke();
+  }
+  if (state.snapGuides.horizontal) {
+    const y = state.renderHeight / 2;
+    targetCtx.beginPath();
+    targetCtx.moveTo(0, y);
+    targetCtx.lineTo(state.renderWidth, y);
+    targetCtx.stroke();
+  }
   targetCtx.restore();
 }
 
@@ -911,11 +950,18 @@ function onPointerMove(event) {
   if (state.interaction.mode === "select") {
     state.interaction.currentX = point.x;
     state.interaction.currentY = point.y;
+    state.snapGuides = null;
     return;
   }
   if (state.interaction.mode === "dragGroup") {
-    const dx = point.x - state.interaction.startX;
-    const dy = point.y - state.interaction.startY;
+    const snap = centerSnapDelta(
+      state.interaction.objects,
+      point.x - state.interaction.startX,
+      point.y - state.interaction.startY,
+    );
+    const dx = snap.dx;
+    const dy = snap.dy;
+    state.snapGuides = snap.guides;
     for (const snapshot of state.interaction.objects) {
       const object = state.mediaObjects.find((item) => item.id === snapshot.id);
       if (!object) continue;
@@ -925,6 +971,7 @@ function onPointerMove(event) {
     return;
   }
   if (state.interaction.mode === "resizeGroup") {
+    state.snapGuides = null;
     const distance = Math.max(8, Math.hypot(point.x - state.interaction.anchorX, point.y - state.interaction.anchorY));
     const factor = Math.max(0.05, distance / state.interaction.startDistance);
     for (const snapshot of state.interaction.objects) {
@@ -948,6 +995,56 @@ function endInteraction(event) {
   }
   if (state.interaction) canvas.releasePointerCapture?.(event.pointerId);
   state.interaction = null;
+  state.snapGuides = null;
+}
+
+function centerSnapDelta(snapshots, dx, dy) {
+  const box = groupBoxFromSnapshots(snapshots, dx, dy);
+  const groupCenterX = box.x + box.w / 2;
+  const groupCenterY = box.y + box.h / 2;
+  const canvasCenterX = state.renderWidth / 2;
+  const canvasCenterY = state.renderHeight / 2;
+  const threshold = centerSnapThreshold();
+  let nextDx = dx;
+  let nextDy = dy;
+  const guides = { vertical: false, horizontal: false };
+  if (Math.abs(groupCenterX - canvasCenterX) <= threshold) {
+    nextDx += canvasCenterX - groupCenterX;
+    guides.vertical = true;
+  }
+  if (Math.abs(groupCenterY - canvasCenterY) <= threshold) {
+    nextDy += canvasCenterY - groupCenterY;
+    guides.horizontal = true;
+  }
+  return {
+    dx: nextDx,
+    dy: nextDy,
+    guides: guides.vertical || guides.horizontal ? guides : null,
+  };
+}
+
+function centerSnapThreshold() {
+  return Math.max(12, Math.min(CENTER_SNAP_THRESHOLD, Math.min(state.renderWidth, state.renderHeight) * 0.025));
+}
+
+function groupBoxFromSnapshots(snapshots, dx, dy) {
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const snapshot of snapshots) {
+    const object = state.mediaObjects.find((item) => item.id === snapshot.id);
+    if (!object) continue;
+    const w = object.width * snapshot.scale;
+    const h = object.height * snapshot.scale;
+    const x = snapshot.x + dx;
+    const y = snapshot.y + dy;
+    minX = Math.min(minX, x - w / 2);
+    minY = Math.min(minY, y - h / 2);
+    maxX = Math.max(maxX, x + w / 2);
+    maxY = Math.max(maxY, y + h / 2);
+  }
+  return { x: minX, y: minY, w: maxX - minX, h: maxY - minY };
 }
 
 function hitTest(point) {
@@ -1011,18 +1108,20 @@ async function exportConnectionSvg() {
   const height = state.renderHeight;
   const color = normalizeColor(state.color);
   const segments = getConnectionSegments(blobs, width, height, Boolean(state.hub));
+  const blobById = new Map(blobs.map((blob) => [blob.id, blob]));
   const dash = state.dashed ? "10 8" : "";
   const mediaImages = (await Promise.all(state.mediaObjects.map((object, index) => svgImageForMediaObject(object, index)))).join("\n");
   const connectionLines = segments.map((segment, index) => {
+    const stroke = connectionColor(blobById.get(segment.from), blobById.get(segment.to) || { id: segment.to }, color);
     return [
       `  <line id="connection-${index + 1}"`,
       `    x1="${roundSvg(segment.x1)}" y1="${roundSvg(segment.y1)}" x2="${roundSvg(segment.x2)}" y2="${roundSvg(segment.y2)}"`,
-      `    stroke="${escapeXml(color)}" stroke-width="${roundSvg(state.stroke)}" stroke-opacity="1" stroke-linecap="round" vector-effect="non-scaling-stroke"`,
+      `    stroke="${escapeXml(stroke)}" stroke-width="${roundSvg(state.stroke)}" stroke-opacity="1" stroke-linecap="round" vector-effect="non-scaling-stroke"`,
       dash ? `    stroke-dasharray="${dash}"` : "",
       `    data-from="${escapeXml(String(segment.from))}" data-to="${escapeXml(String(segment.to))}" data-distance="${roundSvg(segment.distance)}" />`,
     ].filter(Boolean).join("\n");
   }).join("\n");
-  const scopes = blobs.map((blob) => svgScopeForBlob(blob, color, dash)).join("\n");
+  const scopes = blobs.map((blob) => svgScopeForBlob(blob, blobColor(blob, color), dash)).join("\n");
   const svg = [
     `<?xml version="1.0" encoding="UTF-8"?>`,
     `<svg xmlns="http://www.w3.org/2000/svg" width="${roundSvg(width)}" height="${roundSvg(height)}" viewBox="0 0 ${roundSvg(width)} ${roundSvg(height)}"`,
@@ -1081,7 +1180,7 @@ function mediaObjectToDataUrl(object) {
 
 function svgScopeForBlob(blob, color, dash) {
   const radius = Math.max(blob.w, blob.h) * 0.52;
-  const tick = 18;
+  const tick = 8;
   const common = `stroke="${escapeXml(color)}" stroke-width="${roundSvg(state.stroke)}" stroke-opacity="1" stroke-linecap="round" fill="none" vector-effect="non-scaling-stroke"`;
   const dashAttr = dash ? ` stroke-dasharray="${dash}"` : "";
   return [
